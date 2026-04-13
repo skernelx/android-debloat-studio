@@ -1,0 +1,70 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: ""
+          - os: windows-latest
+            args: "--config src-tauri/tauri.windows.conf.json"
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download Windows platform-tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force src-tauri/resources/bin/windows | Out-Null
+          Invoke-WebRequest https://dl.google.com/android/repository/platform-tools-latest-windows.zip -OutFile platform-tools-windows.zip
+          Expand-Archive -Path platform-tools-windows.zip -DestinationPath platform-tools
+          Copy-Item platform-tools/platform-tools/adb.exe src-tauri/resources/bin/windows/adb.exe
+          Copy-Item platform-tools/platform-tools/AdbWinApi.dll src-tauri/resources/bin/windows/AdbWinApi.dll
+          Copy-Item platform-tools/platform-tools/AdbWinUsbApi.dll src-tauri/resources/bin/windows/AdbWinUsbApi.dll
+
+      - name: Build and publish release assets
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Android Debloat Studio ${{ github.ref_name }}
+          releaseBody: |
+            Automated release for Android Debloat Studio.
+
+            Assets:
+            - macOS `.dmg`
+            - Windows NSIS `.exe`
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

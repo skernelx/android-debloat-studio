@@ -7,11 +7,18 @@
 ## 当前状态
 
 - 桌面端：Tauri 2 + React 19
-- 目标平台：macOS
-- 打包形式：`.app` / `.dmg`
+- 目标平台：macOS / Windows
+- 打包形式：macOS `.app` / `.dmg`，Windows `NSIS .exe`
 - 运行方式：应用内置 `adb`
 
-当前仓库的发布目标是 macOS。原因很简单：打包时带进去的是 macOS 版 `adb`，所以没有把 Windows / Linux 包一起开放出来。
+本地开发默认在 macOS 上完成。
+
+公开发布时，仓库会通过 GitHub Actions 同时构建：
+
+- macOS `.dmg`
+- Windows `NSIS .exe`
+
+Windows 发布资产会在构建时自动下载 Windows 版 Android platform-tools，并把 `adb.exe` / `AdbWinApi.dll` / `AdbWinUsbApi.dll` 一起打进安装包。
 
 ## 现在能做什么
 
@@ -78,7 +85,7 @@ pnpm lint
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-### 打包
+### 本地打包
 
 ```bash
 pnpm tauri:build
@@ -88,6 +95,15 @@ pnpm tauri:build
 
 - `src-tauri/target/release/bundle/macos/`
 - `src-tauri/target/release/bundle/dmg/`
+
+### 发布到 GitHub Release
+
+推送形如 `v0.1.1` 的 tag 后，GitHub Actions 会自动构建并发布：
+
+```bash
+git tag v0.1.1
+git push origin v0.1.1
+```
 
 ## 运行说明
 
@@ -102,6 +118,7 @@ pnpm tauri:build
 ## 仓库说明
 
 - 仓库地址：<https://github.com/skernelx/android-debloat-studio>
+- Release 会附带 macOS `dmg` 和 Windows `exe`
 - 当前没有额外发布 npm 包
 - 当前没有单独设置开源许可证文件
 

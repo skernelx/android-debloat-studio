@@ -1,6 +1,6 @@
 [package]
 name = "android-debloat-studio"
-version = "0.1.0"
+version = "0.1.1"
 description = "Android Debloat Studio desktop app"
 authors = ["wf"]
 license = ""

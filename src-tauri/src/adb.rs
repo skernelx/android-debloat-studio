@@ -639,6 +639,8 @@ fn resolve_adb_candidates() -> Vec<String> {
 
             if cfg!(target_os = "macos") {
                 collect_macos_bundle_adb_candidates(&mut candidates);
+            } else if cfg!(target_os = "windows") {
+                collect_windows_bundle_adb_candidates(&mut candidates);
             }
 
             let system_candidates = if cfg!(target_os = "macos") {
@@ -692,17 +694,16 @@ pub fn configure_adb_candidates<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let mut candidates = Vec::new();
 
     if let Ok(resource_dir) = app.path().resource_dir() {
-        push_candidate(&mut candidates, resource_dir.join("resources/bin/adb"));
-        push_candidate(&mut candidates, resource_dir.join("bin/adb"));
-        push_candidate(&mut candidates, resource_dir.join("adb"));
+        push_bundle_adb_candidates_from_base(&mut candidates, &resource_dir);
     }
 
     if let Ok(executable_dir) = app.path().executable_dir() {
-        push_candidate(
+        push_bundle_adb_candidates_from_base(&mut candidates, &executable_dir);
+        push_bundle_adb_candidates_from_base(&mut candidates, &executable_dir.join("../Resources"));
+        push_bundle_adb_candidates_from_base(
             &mut candidates,
-            executable_dir.join("../Resources/resources/bin/adb"),
+            &executable_dir.join("../Resources/resources"),
         );
-        push_candidate(&mut candidates, executable_dir.join("../Resources/bin/adb"));
     }
 
     let _ = CONFIGURED_ADB_CANDIDATES.set(candidates);
@@ -724,6 +725,37 @@ fn collect_macos_bundle_adb_candidates(candidates: &mut Vec<String>) {
             );
             push_candidate(candidates, ancestor.join("resources/bin/adb"));
         }
+    }
+}
+
+fn collect_windows_bundle_adb_candidates(candidates: &mut Vec<String>) {
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            push_bundle_adb_candidates_from_base(candidates, exe_dir);
+            push_bundle_adb_candidates_from_base(candidates, &exe_dir.join("resources"));
+        }
+
+        for ancestor in exe_path.ancestors() {
+            push_bundle_adb_candidates_from_base(candidates, ancestor);
+            push_bundle_adb_candidates_from_base(candidates, &ancestor.join("resources"));
+        }
+    }
+}
+
+fn push_bundle_adb_candidates_from_base(candidates: &mut Vec<String>, base: &Path) {
+    for relative in [
+        "resources/bin/adb",
+        "resources/bin/adb.exe",
+        "resources/bin/windows/adb",
+        "resources/bin/windows/adb.exe",
+        "bin/adb",
+        "bin/adb.exe",
+        "windows/adb",
+        "windows/adb.exe",
+        "adb",
+        "adb.exe",
+    ] {
+        push_candidate(candidates, base.join(relative));
     }
 }
 
