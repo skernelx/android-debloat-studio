@@ -2,6 +2,10 @@
   "name": "android-debloat-studio",
   "private": true,
   "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/skernelx/android-debloat-studio.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

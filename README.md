@@ -1,73 +1,112 @@
-# React + TypeScript + Vite
+# Android Debloat Studio
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+一个面向 macOS 的 Android 预装精简桌面工具。
 
-Currently, two official plugins are available:
+它通过 ADB 读取设备包清单，按规则把系统包分成“核心保留”“安全可删”“用户安装”三类，并支持直接执行 `pm uninstall --user 0`、自动验活和最近一次回滚。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 当前状态
 
-## React Compiler
+- 桌面端：Tauri 2 + React 19
+- 目标平台：macOS
+- 打包形式：`.app` / `.dmg`
+- 运行方式：应用内置 `adb`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+当前仓库的发布目标是 macOS。原因很简单：打包时带进去的是 macOS 版 `adb`，所以没有把 Windows / Linux 包一起开放出来。
 
-## Expanding the ESLint configuration
+## 现在能做什么
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- 扫描已连接 Android 设备并展示品牌、型号、Android 版本、SDK、Build 信息
+- 采集系统包、用户包、桌面入口包、HOME 包和运行时角色信息
+- 分析预装包风险分层
+- 只对“安全可删”项执行 `pm uninstall --user 0`
+- 每删一个包后做验活，异常时自动停止并尝试回退
+- 保留最近一次清理记录，支持恢复
+- 展示批次历史和设备健康检查结果
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## 处理原则
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+当前版本的默认思路是“保守执行”：
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- 不碰用户自己安装的应用
+- 尽量保护系统骨架组件
+- 清理动作只作用于 `user 0`
+- 失败时优先保设备仍能正常进入系统
+
+这意味着它更像是“受控精简工具”，不是“无规则全删脚本”。
+
+## 项目结构
+
+```text
+android-debloat-studio/
+├── src/                     React 前端
+├── src-tauri/src/adb.rs     ADB 调用、设备扫描、包采集
+├── src-tauri/src/analyzer.rs
+│   预装包分析与风险分层
+├── src-tauri/src/cleanup.rs
+│   执行清理、验活、回滚
+├── src-tauri/src/records.rs
+│   历史记录持久化
+└── src-tauri/rules/vendor_rules.json
+    厂商保护规则
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 本地开发
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 依赖
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- Node.js
+- pnpm
+- Rust
+- Xcode Command Line Tools
+
+### 安装依赖
+
+```bash
+pnpm install
 ```
+
+### 启动开发模式
+
+```bash
+pnpm tauri:dev
+```
+
+### 质量检查
+
+```bash
+pnpm lint
+cargo test --manifest-path src-tauri/Cargo.toml
+```
+
+### 打包
+
+```bash
+pnpm tauri:build
+```
+
+打包产物默认在：
+
+- `src-tauri/target/release/bundle/macos/`
+- `src-tauri/target/release/bundle/dmg/`
+
+## 运行说明
+
+1. 用 USB 连接手机
+2. 在手机里打开 USB 调试
+3. 允许当前电脑的调试授权
+4. 打开应用，先点“刷新设备”
+5. 识别到设备后再点“分析预装包”
+
+如果设备没有进入 `device` 状态，应用会直接在界面上提示，不会继续执行分析或清理。
+
+## 仓库说明
+
+- 仓库地址：<https://github.com/skernelx/android-debloat-studio>
+- 当前没有额外发布 npm 包
+- 当前没有单独设置开源许可证文件
+
+如果你要继续把它往“极限精简模式”推进，后续最值得动的地方是：
+
+- 调整分析器的保护策略
+- 收紧或放宽验活标准
+- 把“保守模式”和“极限模式”拆成两套明确可选的执行策略

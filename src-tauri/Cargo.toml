@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Android Debloat Studio desktop app"
 authors = ["wf"]
 license = ""
-repository = ""
+repository = "https://github.com/skernelx/android-debloat-studio"
 edition = "2021"
 rust-version = "1.77.2"
 
