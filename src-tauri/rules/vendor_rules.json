@@ -1,0 +1,162 @@
+{
+  "generic": {
+    "protectedExact": [
+      "android",
+      "com.android.phone",
+      "com.android.settings",
+      "com.android.systemui",
+      "com.android.mms",
+      "com.android.documentsui",
+      "com.android.packageinstaller",
+      "com.android.permissioncontroller",
+      "com.android.contacts",
+      "com.android.camera",
+      "com.android.camera2",
+      "com.android.shell",
+      "com.android.keychain",
+      "com.android.certinstaller",
+      "com.android.defcontainer",
+      "com.android.provision",
+      "com.android.sdksandbox",
+      "com.android.modulemetadata",
+      "com.android.localtransport",
+      "com.android.statementservice",
+      "com.android.wm.shell",
+      "com.android.se",
+      "com.google.android.webview",
+      "com.android.webview",
+      "com.google.android.ext.services",
+      "com.google.android.ext.shared",
+      "com.google.android.carrier",
+      "com.google.android.modulemetadata",
+      "com.android.server.NetworkPermissionConfig",
+      "com.android.devicelockcontroller",
+      "com.android.writeimei",
+      "com.google.android.devicelockcontroller",
+      "com.google.android.rkpdapp",
+      "com.google.android.overlay.googleconfig",
+      "androidhwext",
+      "miui.systemui.plugin"
+    ],
+    "protectedPrefixes": [
+      "com.android.providers.",
+      "com.android.externalstorage",
+      "com.android.bluetooth.",
+      "com.android.server.telecom",
+      "com.android.keyguard",
+      "com.android.incallui",
+      "com.android.networkstack",
+      "com.android.wifi.",
+      "com.android.connectivity",
+      "com.android.ims.",
+      "com.android.internal.display",
+      "com.android.phone.",
+      "com.google.android.networkstack",
+      "com.google.android.wifi",
+      "com.google.android.connectivity",
+      "com.google.android.overlay.modules",
+      "com.google.android.sdksandbox",
+      "com.google.android.permissioncontroller",
+      "com.google.android.packageinstaller",
+      "com.android.phone.overlay",
+      "com.google.android.overlay.pixelconfig",
+      "com.google.android.overlay.gmsconfig"
+    ],
+    "protectedKeywords": [
+      "telephony",
+      "packageinstaller",
+      "permissioncontroller",
+      "keyboard",
+      "webview",
+      "externalstorage",
+      "networkstack"
+    ]
+  },
+  "vendors": {
+    "huawei": {
+      "protectedExact": [
+        "com.huawei.android.launcher",
+        "com.huawei.camera",
+        "com.huawei.systemmanager",
+        "com.huawei.webview",
+        "com.huawei.hwddmp",
+        "com.huawei.android.hwaps",
+        "com.android.frameworkhwext.dark",
+        "com.android.frameworkhwext.honor"
+      ],
+      "protectedPrefixes": [
+        "com.huawei.security",
+        "com.huawei.system",
+        "com.huawei.trust",
+        "com.huawei.powergenie",
+        "com.huawei.ims",
+        "com.huawei.lbs"
+      ],
+      "protectedKeywords": []
+    },
+    "xiaomi": {
+      "protectedExact": [
+        "com.miui.home",
+        "com.miui.rom",
+        "com.miui.system",
+        "com.miui.packageinstaller",
+        "com.miui.securitycenter",
+        "com.miui.securitycore",
+        "com.xiaomi.misettings",
+        "miui.systemui.plugin"
+      ],
+      "protectedPrefixes": [
+      ],
+      "protectedKeywords": [
+        "securitycenter",
+        "finddevice"
+      ]
+    },
+    "samsung": {
+      "protectedExact": [
+        "com.samsung.android.kgclient",
+        "com.samsung.android.SettingsReceiver",
+        "com.samsung.android.communicationservice",
+        "com.samsung.android.incallui",
+        "com.samsung.android.networkstack",
+        "com.samsung.android.applock",
+        "com.samsung.android.clipboarduiservice",
+        "com.samsung.android.sm.policy",
+        "com.samsung.networkui",
+        "com.samsung.android.storage.watchstoragemanager",
+        "com.sec.android.app.simsettingmgr",
+        "com.samsung.ucs.agent.boot",
+        "com.samsung.android.mtp",
+        "com.samsung.android.app.soundpicker"
+      ],
+      "protectedPrefixes": [
+        "com.samsung.android.timezone",
+        "com.samsung.android.wifi",
+        "com.samsung.android.ConnectivityOverlay",
+        "com.samsung.android.ConnectivityUxOverlay",
+        "com.samsung.knox",
+        "com.samsung.vklayer",
+        "com.samsung.gamedriver"
+      ],
+      "protectedKeywords": []
+    },
+    "coloros": {
+      "protectedExact": [
+        "com.coloros.bootreg",
+        "com.coloros.safecenter",
+        "com.coloros.securitypermission",
+        "com.heytap.appplatform"
+      ],
+      "protectedPrefixes": [],
+      "protectedKeywords": []
+    },
+    "vivo": {
+      "protectedExact": [],
+      "protectedPrefixes": [
+        "com.vivo.android.connectivity",
+        "com.vivo.android.wifi"
+      ],
+      "protectedKeywords": []
+    }
+  }
+}

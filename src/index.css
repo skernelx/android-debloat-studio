@@ -1,0 +1,44 @@
+:root {
+  --bg: #f4efe7;
+  --panel-bg: rgba(255, 252, 248, 0.86);
+  --panel-border: rgba(84, 57, 33, 0.12);
+  --panel-shadow: 0 20px 40px rgba(47, 31, 16, 0.08);
+  --text: #1f1711;
+  --text-muted: #5f5348;
+  --accent: #a64b00;
+  font-family:
+    "IBM Plex Sans",
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top right, rgba(255, 210, 161, 0.38), transparent 26%),
+    linear-gradient(180deg, #fbf8f2 0%, var(--bg) 100%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100vh;
+}
+
+body {
+  margin: 0;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
