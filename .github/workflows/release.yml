@@ -41,6 +41,15 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Download macOS platform-tools
+        if: runner.os == 'macOS'
+        run: |
+          curl -fsSL -o platform-tools-mac.zip https://dl.google.com/android/repository/platform-tools-latest-darwin.zip
+          unzip -q platform-tools-mac.zip
+          mkdir -p src-tauri/resources/bin
+          cp platform-tools/adb src-tauri/resources/bin/adb
+          chmod +x src-tauri/resources/bin/adb
+
       - name: Download Windows platform-tools
         if: runner.os == 'Windows'
         shell: pwsh

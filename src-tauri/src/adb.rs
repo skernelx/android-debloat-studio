@@ -3,12 +3,12 @@ use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::Manager;
 
-static RESOLVED_ADB_CANDIDATES: OnceLock<Vec<String>> = OnceLock::new();
+static RESOLVED_ADB_CANDIDATES: RwLock<Option<Vec<String>>> = RwLock::new(None);
 static CONFIGURED_ADB_CANDIDATES: OnceLock<Vec<String>> = OnceLock::new();
 const DEFAULT_ADB_TIMEOUT: Duration = Duration::from_secs(15);
 const DEVICE_SCAN_TIMEOUT: Duration = Duration::from_secs(5);
@@ -520,6 +520,9 @@ pub fn run_adb(args: &[&str]) -> Result<String, String> {
         }
     }
 
+    // All candidates failed to spawn — invalidate cache so next call re-discovers
+    invalidate_adb_candidates();
+
     if spawn_failures.is_empty() {
         Err("未找到可用的 adb，可检查安装包资源或系统是否已安装 adb。".to_string())
     } else {
@@ -623,71 +626,90 @@ enum AdbRunError {
 }
 
 fn resolve_adb_candidates() -> Vec<String> {
-    RESOLVED_ADB_CANDIDATES
-        .get_or_init(|| {
-            let mut candidates = Vec::new();
+    {
+        let guard = RESOLVED_ADB_CANDIDATES.read().unwrap();
+        if let Some(cached) = guard.as_ref() {
+            return cached.clone();
+        }
+    }
 
-            if let Some(configured) = CONFIGURED_ADB_CANDIDATES.get() {
-                for candidate in configured {
-                    push_candidate(&mut candidates, PathBuf::from(candidate));
-                }
+    let candidates = build_adb_candidates();
+
+    {
+        let mut guard = RESOLVED_ADB_CANDIDATES.write().unwrap();
+        *guard = Some(candidates.clone());
+    }
+
+    candidates
+}
+
+fn invalidate_adb_candidates() {
+    let mut guard = RESOLVED_ADB_CANDIDATES.write().unwrap();
+    *guard = None;
+}
+
+fn build_adb_candidates() -> Vec<String> {
+    let mut candidates = Vec::new();
+
+    if let Some(configured) = CONFIGURED_ADB_CANDIDATES.get() {
+        for candidate in configured {
+            push_candidate(&mut candidates, PathBuf::from(candidate));
+        }
+    }
+
+    if let Ok(explicit_path) = std::env::var("ANDROID_DEBLOAT_STUDIO_ADB_PATH") {
+        push_candidate(&mut candidates, PathBuf::from(explicit_path));
+    }
+
+    if cfg!(target_os = "macos") {
+        collect_macos_bundle_adb_candidates(&mut candidates);
+    } else if cfg!(target_os = "windows") {
+        collect_windows_bundle_adb_candidates(&mut candidates);
+    }
+
+    let system_candidates = if cfg!(target_os = "macos") {
+        vec![
+            "/opt/homebrew/bin/adb",
+            "/usr/local/bin/adb",
+            "/usr/bin/adb",
+        ]
+    } else if cfg!(target_os = "linux") {
+        vec!["/usr/local/bin/adb", "/usr/bin/adb"]
+    } else {
+        Vec::new()
+    };
+
+    for candidate in system_candidates {
+        push_candidate(&mut candidates, PathBuf::from(candidate));
+    }
+
+    let lookup_command = if cfg!(target_os = "windows") {
+        ("where", "adb")
+    } else {
+        ("which", "adb")
+    };
+
+    if let Ok(output) = Command::new(lookup_command.0)
+        .arg(lookup_command.1)
+        .output()
+    {
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !path.is_empty() {
+            for match_path in path.lines() {
+                push_candidate(&mut candidates, PathBuf::from(match_path.trim()));
             }
+        }
+    }
 
-            if let Ok(explicit_path) = std::env::var("ANDROID_DEBLOAT_STUDIO_ADB_PATH") {
-                push_candidate(&mut candidates, PathBuf::from(explicit_path));
-            }
+    if candidates.is_empty() {
+        candidates.push(if cfg!(target_os = "windows") {
+            "adb.exe".to_string()
+        } else {
+            "adb".to_string()
+        });
+    }
 
-            if cfg!(target_os = "macos") {
-                collect_macos_bundle_adb_candidates(&mut candidates);
-            } else if cfg!(target_os = "windows") {
-                collect_windows_bundle_adb_candidates(&mut candidates);
-            }
-
-            let system_candidates = if cfg!(target_os = "macos") {
-                vec![
-                    "/opt/homebrew/bin/adb",
-                    "/usr/local/bin/adb",
-                    "/usr/bin/adb",
-                ]
-            } else if cfg!(target_os = "linux") {
-                vec!["/usr/local/bin/adb", "/usr/bin/adb"]
-            } else {
-                Vec::new()
-            };
-
-            for candidate in system_candidates {
-                push_candidate(&mut candidates, PathBuf::from(candidate));
-            }
-
-            let lookup_command = if cfg!(target_os = "windows") {
-                ("where", "adb")
-            } else {
-                ("which", "adb")
-            };
-
-            if let Ok(output) = Command::new(lookup_command.0)
-                .arg(lookup_command.1)
-                .output()
-            {
-                let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !path.is_empty() {
-                    for match_path in path.lines() {
-                        push_candidate(&mut candidates, PathBuf::from(match_path.trim()));
-                    }
-                }
-            }
-
-            if candidates.is_empty() {
-                candidates.push(if cfg!(target_os = "windows") {
-                    "adb.exe".to_string()
-                } else {
-                    "adb".to_string()
-                });
-            }
-
-            candidates
-        })
-        .clone()
+    candidates
 }
 
 pub fn configure_adb_candidates<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {

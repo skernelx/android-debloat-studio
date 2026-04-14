@@ -1,7 +1,7 @@
+use crate::analyzer::CleanupMode;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 
 const MAX_HISTORY_ENTRIES: usize = 200;
@@ -18,6 +18,8 @@ pub enum OperationKind {
 pub struct OperationHistoryEntry {
     pub id: String,
     pub kind: OperationKind,
+    #[serde(default)]
+    pub mode: CleanupMode,
     pub serial: String,
     pub vendor_family: String,
     pub timestamp_ms: u64,
@@ -55,7 +57,7 @@ pub fn list_operation_history(app: &AppHandle) -> Result<Vec<OperationHistoryEnt
 }
 
 pub fn history_entry_id() -> String {
-    format!("op-{}", now_ms())
+    crate::util::unique_id("op")
 }
 
 fn history_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -84,11 +86,4 @@ fn write_json_file<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
 fn read_json_file<T: DeserializeOwned>(path: &Path) -> Result<T, String> {
     let payload = fs::read_to_string(path).map_err(|error| format!("读取文件失败: {error}"))?;
     serde_json::from_str(&payload).map_err(|error| format!("解析文件失败: {error}"))
-}
-
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or_default()
 }

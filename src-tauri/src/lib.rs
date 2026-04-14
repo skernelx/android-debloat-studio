@@ -2,9 +2,10 @@ mod adb;
 mod analyzer;
 mod cleanup;
 mod records;
+mod util;
 
 use adb::AndroidDevice;
-use analyzer::DeviceAnalysis;
+use analyzer::{CleanupMode, DeviceAnalysis};
 use cleanup::{CleanupExecutionReport, CleanupRestoreReport};
 use records::OperationHistoryEntry;
 
@@ -14,7 +15,7 @@ fn scan_devices() -> Result<Vec<AndroidDevice>, String> {
 }
 
 #[tauri::command]
-fn analyze_device(serial: String) -> Result<DeviceAnalysis, String> {
+fn analyze_device(serial: String, mode: Option<CleanupMode>) -> Result<DeviceAnalysis, String> {
     let devices = adb::scan_devices()?;
     let device = devices
         .into_iter()
@@ -27,6 +28,7 @@ fn analyze_device(serial: String) -> Result<DeviceAnalysis, String> {
         &device,
         &packages,
         &runtime_profile,
+        mode.unwrap_or_default(),
     ))
 }
 
@@ -35,8 +37,9 @@ fn execute_cleanup(
     app: tauri::AppHandle,
     serial: String,
     package_names: Vec<String>,
+    mode: Option<CleanupMode>,
 ) -> Result<CleanupExecutionReport, String> {
-    cleanup::execute_cleanup(&app, &serial, &package_names)
+    cleanup::execute_cleanup(&app, &serial, &package_names, mode.unwrap_or_default())
 }
 
 #[tauri::command]

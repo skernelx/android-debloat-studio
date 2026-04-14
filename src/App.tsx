@@ -9,6 +9,7 @@ import {
 } from './api'
 import type {
   AndroidDevice,
+  CleanupMode,
   CleanupExecutionReport,
   CleanupRestoreReport,
   DeviceAnalysis,
@@ -19,8 +20,38 @@ import type {
 } from './types'
 import './App.css'
 
+const MODE_COPY: Record<
+  CleanupMode,
+  {
+    label: string
+    shortLabel: string
+    description: string
+    risk: string
+    operationsNote: string
+  }
+> = {
+  balanced: {
+    label: '平衡模式',
+    shortLabel: '平衡',
+    description: '尽量保留设置、电话、短信、相机等常见系统能力，适合先稳住系统再做清理。',
+    risk: '这是默认策略，候选包更少，但翻车概率也更低。',
+    operationsNote:
+      '只会执行当前模式判定为“安全可删”的勾选项；后端仍会再次校验安全范围，并在每删一个包后立刻做验活。',
+  },
+  minimalCore: {
+    label: '极限精简',
+    shortLabel: '极限',
+    description:
+      '只优先保留系统骨架、桌面、安装和运行所需组件，电话、短信、相机、浏览器，以及厂商安全中心这类壳子都可能进入可删范围。',
+    risk: '这是更激进的模式，候选包会明显变多，适合你现在这种“只保系统能装能跑”目标。',
+    operationsNote:
+      '极限模式会把更多系统功能列入候选范围。执行前请确认你确实不再需要电话、短信、相机、浏览器等原生能力。',
+  },
+}
+
 function App() {
   const [devices, setDevices] = useState<AndroidDevice[]>([])
+  const [cleanupMode, setCleanupMode] = useState<CleanupMode>('balanced')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null)
@@ -54,7 +85,7 @@ function App() {
   }
 
   async function refreshAnalysis(serial: string) {
-    const nextAnalysis = await analyzeDevice(serial)
+    const nextAnalysis = await analyzeDevice(serial, cleanupMode)
 
     startTransition(() => {
       setAnalysis(nextAnalysis)
@@ -82,12 +113,12 @@ function App() {
         setExecutionReport(null)
         setRestoreReport(null)
         setActionMessage(
-          `已完成 ${serial} 的预装包分析，安全可删项已默认全选。`,
+          `已完成 ${serial} 的${MODE_COPY[nextAnalysis.mode].label}分析，候选清理项已默认全选。`,
         )
       })
 
       if (nextAnalysis.packages.length === 0) {
-        setActionMessage(`已完成 ${serial} 的预装包分析，但没有读到任何包。`)
+        setActionMessage(`已完成 ${serial} 的${MODE_COPY[nextAnalysis.mode].label}分析，但没有读到任何包。`)
       }
     } catch (analysisError) {
       const message =
@@ -106,7 +137,14 @@ function App() {
 
     const nextSelection = selectedSafePackages(analysis, selectedPackageNames)
     if (nextSelection.length === 0) {
-      setError('请先勾选至少一个“安全可删”包。')
+      setError('请先勾选至少一个”安全可删”包。')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `即将对设备 ${serial} 执行清理，共 ${nextSelection.length} 个包将被卸载（user 0）。\n\n确认继续？`,
+    )
+    if (!confirmed) {
       return
     }
 
@@ -117,6 +155,7 @@ function App() {
       const report = await executeCleanup(
         serial,
         nextSelection.map((item) => item.packageName),
+        analysis.mode,
       )
 
       try {
@@ -192,6 +231,22 @@ function App() {
     setSelectedPackageNames([])
   }
 
+  function handleModeChange(nextMode: CleanupMode) {
+    if (nextMode === cleanupMode) {
+      return
+    }
+
+    setCleanupMode(nextMode)
+    startTransition(() => {
+      setAnalysis(null)
+      setExecutionReport(null)
+      setRestoreReport(null)
+      setSelectedPackageNames([])
+      setActionMessage(`已切换到${MODE_COPY[nextMode].label}，请重新分析当前设备。`)
+      setError(null)
+    })
+  }
+
   function togglePackageSelection(packageName: string) {
     setSelectedPackageNames((current) =>
       current.includes(packageName)
@@ -210,6 +265,8 @@ function App() {
   const activeSerial = analysis?.device.serial ?? null
   const latestHealthReport = restoreReport?.healthReport ?? executionReport?.healthReport ?? null
   const deviceGuide = buildDeviceGuide(devices, loading, error)
+  const activeMode = analysis?.mode ?? cleanupMode
+  const modeCopy = MODE_COPY[activeMode]
 
   useEffect(() => {
     void refreshDevices()
@@ -223,9 +280,9 @@ function App() {
     <main className="app-shell">
       <section className="hero-panel">
         <p className="eyebrow">Android Debloat Studio</p>
-        <h1>安全极限精简桌面程序</h1>
+        <h1>安卓预装清理工作台</h1>
         <p className="intro">
-          自动识别设备、分析预装包，并把安全可删项直接列成可勾选清理列表。
+          自动识别设备、分析预装包，并按清理模式生成可直接执行的候选列表。
         </p>
         <div className="hero-actions">
           <button className="primary-button" onClick={() => void refreshDevices()}>
@@ -243,9 +300,47 @@ function App() {
           <p>设备识别、包分析、逐包验活、自动回退和最近一次恢复都已接上。</p>
         </article>
         <article className="status-card">
-          <h2>执行策略</h2>
-          <p>只允许勾选绿色安全项；真正执行前，后端还会再按安全规则过滤一遍。</p>
+          <h2>当前模式</h2>
+          <p>{MODE_COPY[cleanupMode].description}</p>
         </article>
+      </section>
+
+      <section className="mode-panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">清理策略</p>
+            <h2>先选模式，再分析设备</h2>
+          </div>
+          <span className="device-count">{MODE_COPY[cleanupMode].label}</span>
+        </div>
+
+        <p className="mode-panel-note">
+          切换模式后会清空当前分析结果，需要重新点一次“分析预装包”。
+        </p>
+
+        <div className="mode-grid">
+          {(Object.entries(MODE_COPY) as Array<[CleanupMode, (typeof MODE_COPY)[CleanupMode]]>).map(
+            ([mode, copy]) => (
+              <button
+                key={mode}
+                className={`mode-card ${cleanupMode === mode ? 'active' : ''} ${mode}`}
+                onClick={() => handleModeChange(mode)}
+                type="button"
+              >
+                <div className="mode-card-header">
+                  <div>
+                    <h3>{copy.label}</h3>
+                    <p>{copy.description}</p>
+                  </div>
+                  <span className={`pill ${mode === 'minimalCore' ? 'warning' : 'success'}`}>
+                    {cleanupMode === mode ? '当前选择' : '可切换'}
+                  </span>
+                </div>
+                <p className="mode-risk">{copy.risk}</p>
+              </button>
+            ),
+          )}
+        </div>
       </section>
 
       <section className="device-panel">
@@ -330,7 +425,7 @@ function App() {
             <h2>预装包分层结果</h2>
           </div>
           <span className="device-count">
-            {analysis ? `${analysis.vendorFamily} 规则` : '等待分析'}
+            {analysis ? `${MODE_COPY[analysis.mode].shortLabel} · ${analysis.vendorFamily} 规则` : '等待分析'}
           </span>
         </div>
 
@@ -356,6 +451,10 @@ function App() {
               的系统预装。
             </p>
 
+            <p className="mode-summary-note">
+              当前使用 {modeCopy.label}。{modeCopy.risk}
+            </p>
+
             <section className="operations-panel">
               <div className="operations-header">
                 <div>
@@ -368,8 +467,7 @@ function App() {
               </div>
 
               <p className="operations-note">
-                只会执行绿色“安全可删”列表里的勾选项；后端仍会再次校验安全范围，
-                并在每删一个包后立刻做验活。
+                {modeCopy.operationsNote}
               </p>
 
               <div className="operation-actions">
@@ -744,7 +842,7 @@ function HistoryPanel({ entries }: { entries: OperationHistoryEntry[] }) {
                 </span>
               </div>
               <p className="health-detail">
-                {formatDateTime(item.timestampMs)} · {item.summary}
+                {formatDateTime(item.timestampMs)} · {MODE_COPY[item.mode].label} · {item.summary}
               </p>
             </article>
           ))}

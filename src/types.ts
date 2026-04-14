@@ -13,6 +13,8 @@ export type AndroidDevice = {
   fingerprint?: string | null
 }
 
+export type CleanupMode = 'balanced' | 'minimalCore'
+
 export type PackageSource = 'system' | 'user' | 'unknown'
 
 export type RiskLevel = 'coreKeep' | 'safeRemove' | 'userInstalled'
@@ -39,6 +41,7 @@ export type AnalysisSummary = {
 }
 
 export type DeviceAnalysis = {
+  mode: CleanupMode
   device: AndroidDevice
   vendorFamily: string
   summary: AnalysisSummary
@@ -69,6 +72,7 @@ export type PackageOperationResult = {
 }
 
 export type CleanupExecutionReport = {
+  mode: CleanupMode
   serial: string
   startedAtMs: number
   finishedAtMs: number
@@ -81,6 +85,7 @@ export type CleanupExecutionReport = {
 }
 
 export type CleanupRestoreReport = {
+  mode: CleanupMode
   serial: string
   startedAtMs: number
   finishedAtMs: number
@@ -95,6 +100,7 @@ export type OperationKind = 'cleanup' | 'restore'
 export type OperationHistoryEntry = {
   id: string
   kind: OperationKind
+  mode: CleanupMode
   serial: string
   vendorFamily: string
   timestampMs: number

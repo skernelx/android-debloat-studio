@@ -1,11 +1,10 @@
 use crate::adb::{self, PackageSource};
-use crate::analyzer::{self, DeviceAnalysis, RecommendedAction};
+use crate::analyzer::{self, CleanupMode, DeviceAnalysis, RecommendedAction};
 use crate::records::{self, OperationHistoryEntry, OperationKind};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 
 const SETTINGS_CANDIDATES: &[&str] = &["com.android.settings", "com.xiaomi.misettings"];
@@ -52,6 +51,8 @@ pub struct CleanupPlanEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanupPlan {
+    #[serde(default)]
+    pub mode: CleanupMode,
     pub serial: String,
     pub vendor_family: String,
     pub generated_at_ms: u64,
@@ -105,6 +106,7 @@ pub struct PackageOperationResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanupExecutionReport {
+    pub mode: CleanupMode,
     pub serial: String,
     pub started_at_ms: u64,
     pub finished_at_ms: u64,
@@ -119,6 +121,7 @@ pub struct CleanupExecutionReport {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CleanupRestoreReport {
+    pub mode: CleanupMode,
     pub serial: String,
     pub started_at_ms: u64,
     pub finished_at_ms: u64,
@@ -143,8 +146,8 @@ struct PreparedContext {
     warnings: Vec<String>,
 }
 
-pub fn generate_cleanup_plan(serial: &str) -> Result<CleanupPlan, String> {
-    let context = prepare_context(serial)?;
+pub fn generate_cleanup_plan(serial: &str, mode: CleanupMode) -> Result<CleanupPlan, String> {
+    let context = prepare_context(serial, mode)?;
     Ok(build_cleanup_plan(
         &context.analysis,
         context.verification_targets,
@@ -156,8 +159,9 @@ pub fn execute_cleanup(
     app: &AppHandle,
     serial: &str,
     requested_packages: &[String],
+    mode: CleanupMode,
 ) -> Result<CleanupExecutionReport, String> {
-    let plan = generate_cleanup_plan(serial)?;
+    let plan = generate_cleanup_plan(serial, mode)?;
     let requested_set: HashSet<&str> = requested_packages.iter().map(String::as_str).collect();
     let mut queue: Vec<String> = plan
         .packages
@@ -169,7 +173,7 @@ pub fn execute_cleanup(
         .collect();
 
     if queue.is_empty() {
-        return Err("当前没有可执行的安全清理包".into());
+        return Err("当前没有可执行的清理包".into());
     }
 
     let baseline = verify_device_health(serial, &plan.verification_targets);
@@ -262,6 +266,7 @@ pub fn execute_cleanup(
         OperationHistoryEntry {
             id: records::history_entry_id(),
             kind: OperationKind::Cleanup,
+            mode: plan.mode,
             serial: serial.to_string(),
             vendor_family: plan.vendor_family.clone(),
             timestamp_ms: finished_at_ms,
@@ -270,11 +275,17 @@ pub fn execute_cleanup(
             failed_count,
             aborted,
             health_passed: last_health.passed,
-            summary: format!("删除 {} 个包，失败/回退 {} 个", removed_count, failed_count),
+            summary: format!(
+                "{}：删除 {} 个包，失败/回退 {} 个",
+                plan.mode.label(),
+                removed_count,
+                failed_count
+            ),
         },
     )?;
 
     Ok(CleanupExecutionReport {
+        mode: plan.mode,
         serial: serial.to_string(),
         started_at_ms,
         finished_at_ms,
@@ -320,6 +331,7 @@ pub fn restore_cleanup(app: &AppHandle, serial: &str) -> Result<CleanupRestoreRe
     let health_report = verify_device_health(serial, &record.plan.verification_targets);
     let finished_at_ms = now_ms();
     let vendor_family = record.plan.vendor_family.clone();
+    let restore_mode = record.plan.mode;
     let restored_count = results
         .iter()
         .filter(|item| item.status == PackageOperationStatus::Restored)
@@ -347,6 +359,7 @@ pub fn restore_cleanup(app: &AppHandle, serial: &str) -> Result<CleanupRestoreRe
         OperationHistoryEntry {
             id: records::history_entry_id(),
             kind: OperationKind::Restore,
+            mode: restore_mode,
             serial: serial.to_string(),
             vendor_family,
             timestamp_ms: finished_at_ms,
@@ -355,11 +368,17 @@ pub fn restore_cleanup(app: &AppHandle, serial: &str) -> Result<CleanupRestoreRe
             failed_count,
             aborted: false,
             health_passed: health_report.passed,
-            summary: format!("恢复 {} 个包，失败 {} 个", restored_count, failed_count),
+            summary: format!(
+                "{}：恢复 {} 个包，失败 {} 个",
+                restore_mode.label(),
+                restored_count,
+                failed_count
+            ),
         },
     )?;
 
     Ok(CleanupRestoreReport {
+        mode: restore_mode,
         serial: serial.to_string(),
         started_at_ms,
         finished_at_ms,
@@ -370,7 +389,7 @@ pub fn restore_cleanup(app: &AppHandle, serial: &str) -> Result<CleanupRestoreRe
     })
 }
 
-fn prepare_context(serial: &str) -> Result<PreparedContext, String> {
+fn prepare_context(serial: &str, mode: CleanupMode) -> Result<PreparedContext, String> {
     let devices = adb::scan_devices()?;
     let device = devices
         .into_iter()
@@ -383,7 +402,7 @@ fn prepare_context(serial: &str) -> Result<PreparedContext, String> {
 
     let packages = adb::collect_package_inventory(serial)?;
     let runtime_profile = adb::collect_runtime_profile(serial);
-    let analysis = analyzer::analyze_device(&device, &packages, &runtime_profile);
+    let analysis = analyzer::analyze_device(&device, &packages, &runtime_profile, mode);
     let (verification_targets, warnings) = resolve_verification_targets(serial, &analysis)?;
 
     Ok(PreparedContext {
@@ -426,15 +445,22 @@ fn resolve_verification_targets(
     .ok_or_else(|| "当前设备未识别到 SystemUI 核心包，拒绝生成执行计划".to_string())?;
 
     let mut warnings = Vec::new();
-    let phone_package = pick_first_present(&inventory_names, PHONE_CANDIDATES);
-    if phone_package.is_none() {
-        warnings.push("没有识别到标准电话组件，执行时将跳过该项验活".into());
-    }
+    let (phone_package, camera_package) = if analysis.mode == CleanupMode::Balanced {
+        let phone_package = pick_first_present(&inventory_names, PHONE_CANDIDATES);
+        if phone_package.is_none() {
+            warnings.push("没有识别到标准电话组件，执行时将跳过该项验活".into());
+        }
 
-    let camera_package = pick_first_present(&inventory_names, CAMERA_CANDIDATES);
-    if camera_package.is_none() {
-        warnings.push("没有识别到标准相机组件，执行时将跳过该项验活".into());
-    }
+        let camera_package = pick_first_present(&inventory_names, CAMERA_CANDIDATES);
+        if camera_package.is_none() {
+            warnings.push("没有识别到标准相机组件，执行时将跳过该项验活".into());
+        }
+
+        (phone_package, camera_package)
+    } else {
+        warnings.push("当前处于极限精简模式，电话和相机不再作为验活目标".into());
+        (None, None)
+    };
 
     Ok((
         VerificationTargets {
@@ -487,6 +513,7 @@ fn build_cleanup_plan(
     }
 
     CleanupPlan {
+        mode: analysis.mode,
         serial: analysis.device.serial.clone(),
         vendor_family: analysis.vendor_family.clone(),
         generated_at_ms: now_ms(),
@@ -779,10 +806,7 @@ fn normalize_detail(detail: String, fallback: &str) -> String {
 }
 
 fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or_default()
+    crate::util::now_ms()
 }
 
 #[cfg(test)]
@@ -793,7 +817,9 @@ mod tests {
         PackageOperationStatus, VerificationTargets,
     };
     use crate::adb::{AndroidDevice, PackageSource};
-    use crate::analyzer::{DeviceAnalysis, PackageAssessment, RecommendedAction, RiskLevel};
+    use crate::analyzer::{
+        CleanupMode, DeviceAnalysis, PackageAssessment, RecommendedAction, RiskLevel,
+    };
     use std::fs;
 
     fn analysis_fixture() -> DeviceAnalysis {
@@ -813,6 +839,7 @@ mod tests {
                 fingerprint: Some("fingerprint".into()),
             },
             vendor_family: "huawei".into(),
+            mode: CleanupMode::Balanced,
             summary: Default::default(),
             packages: vec![
                 PackageAssessment {
@@ -882,6 +909,7 @@ mod tests {
                 fingerprint: Some("Xiaomi/houji/houji".into()),
             },
             vendor_family: "xiaomi".into(),
+            mode: CleanupMode::Balanced,
             summary: Default::default(),
             packages: vec![
                 PackageAssessment {
@@ -912,6 +940,7 @@ mod tests {
 
         assert_eq!(plan.packages.len(), 1);
         assert_eq!(plan.packages[0].package_name, "com.huawei.appmarket");
+        assert_eq!(plan.mode, CleanupMode::Balanced);
     }
 
     #[test]
@@ -927,6 +956,7 @@ mod tests {
         let record = super::RollbackRecord {
             serial: "SERIAL".into(),
             plan: CleanupPlan {
+                mode: CleanupMode::Balanced,
                 serial: "SERIAL".into(),
                 vendor_family: "huawei".into(),
                 generated_at_ms: 1,
