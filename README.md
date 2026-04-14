@@ -1,217 +1,243 @@
 # Android Debloat Studio
 
-Android Debloat Studio 是一个桌面端 Android 预装清理工具。
+A desktop app that removes Android bloatware without root, built with Tauri 2, React, and Rust.
 
-它把一串零散的 ADB 操作收成了一个可视化流程：连接手机、分析预装包、挑选可删项、执行 `pm uninstall --user 0`、记录结果，并在需要时恢复最近一次清理。
+Connect your phone via USB, scan preinstalled packages, review a risk-layered analysis, and uninstall what you don't need — all through a visual interface instead of raw ADB commands.
 
-这个项目的目标很直接：
+[![Latest Release](https://img.shields.io/github/v/release/skernelx/android-debloat-studio?style=flat-square)](https://github.com/skernelx/android-debloat-studio/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue?style=flat-square)](#download)
+[![Built with Tauri](https://img.shields.io/badge/built%20with-Tauri%202-FFC131?style=flat-square)](https://tauri.app)
 
-- 不用手敲 ADB 命令
-- 不用自己翻系统包名
-- 不用每次清理后再手动确认设备是不是还活着
+## Features
 
-## 它适合谁
+- **Device auto-detection** — scans connected devices and displays brand, model, Android version, SDK level, and build info
+- **Risk-based package analysis** — classifies every package into *core keep*, *safe remove*, or *user installed* based on vendor rules and runtime role detection
+- **Two cleanup modes** — *Balanced* (conservative, preserves dialer/SMS/camera) and *Minimal Core* (aggressive, keeps only the OS skeleton)
+- **Per-package health checks** — runs a liveness probe after each uninstall; aborts the batch if the device becomes unhealthy
+- **One-click restore** — rolls back the most recent cleanup batch
+- **Operation history** — records every cleanup and restore with timestamps and health status
+- **Multi-vendor rules** — built-in rule packs for Xiaomi/Redmi, Huawei/Honor, Samsung, OPPO/realme/OnePlus, and vivo/iQOO
+- **Bundled ADB** — ships with its own `adb` binary, no separate installation required
+- **Connection guidance** — step-by-step USB debugging instructions for each major brand, shown directly in the UI
 
-- 想清理 Android 预装应用，但不想手工跑 ADB 的人
-- 想先看分析结果，再决定删什么的人
-- 想保留一次“最近清理记录”，出问题能回滚的人
+## How it works
 
-## 它不做什么
+1. Reads device info and all installed packages via ADB
+2. Applies vendor-specific rules + runtime role detection (home launcher, default dialer, default SMS) to classify packages
+3. Presents a selectable list of packages deemed safe to remove
+4. Executes `pm uninstall --user 0` for selected packages, with a health check after each removal
+5. Saves the batch to local history for potential rollback
 
-- 不 root 手机
-- 不改系统分区
-- 不刷机
-- 不承诺“极限精简”
+> **Note:** `pm uninstall --user 0` hides/uninstalls the app for the current user. It does not delete the APK from the system partition. A factory reset will bring everything back.
 
-当前版本仍然是一个**偏保守**的清理工具，不是“除了桌面全删”的激进脚本。
+## Download
 
-## 当前支持
+Grab the latest installer from [**Releases**](https://github.com/skernelx/android-debloat-studio/releases):
 
-桌面端：
+| Platform | File |
+|----------|------|
+| macOS (Apple Silicon) | `Android.Debloat.Studio_*.dmg` |
+| Windows (x64) | `Android.Debloat.Studio_*_x64-setup.exe` |
 
-- macOS Apple Silicon：`.dmg`
-- Windows x64：`.exe`
+## Quick start
 
-手机侧要求：
+1. **Enable USB Debugging** on your phone — go to *About Phone*, tap *Build Number* 7 times, then enable *USB Debugging* in *Developer Options*
+2. **Connect** your phone via a data-capable USB cable and authorize the computer when prompted
+3. **Launch** Android Debloat Studio and click *Refresh Devices*
+4. **Analyze** — once the device shows as *Ready*, click *Analyze Preinstalled Packages*
+5. **Review & clean** — check the packages you want to remove, then click the cleanup button
+6. **Restore if needed** — use *Restore Last Cleanup* to roll back
 
-- Android 设备
-- USB 数据线
-- 已开启 USB 调试
-- 已允许当前电脑的调试授权
+## Cleanup modes
 
-当前 Release：
+| Mode | Strategy | Best for |
+|------|----------|----------|
+| **Balanced** | Preserves dialer, SMS, camera, browser, and vendor security apps | Safe first-pass cleanup |
+| **Minimal Core** | Only keeps OS skeleton, launcher, installer, and connectivity | Maximum debloat when you don't need built-in phone/SMS/camera |
 
-- [Releases](https://github.com/skernelx/android-debloat-studio/releases)
+## Supported vendors
 
-> 应用内置 ADB。正常使用时，不需要你自己再装一份 `adb`。
+| Vendor family | Brands |
+|---------------|--------|
+| Xiaomi | Xiaomi, Redmi, POCO (MIUI / HyperOS) |
+| Huawei | Huawei, Honor (EMUI / MagicUI) |
+| Samsung | Samsung (One UI) |
+| ColorOS | OPPO, realme, OnePlus (ColorOS) |
+| vivo | vivo, iQOO (Funtouch / OriginOS) |
+| Generic | All other Android devices |
 
-## 现在能做什么
+## Development
 
-- 扫描已连接设备，显示品牌、型号、Android 版本、SDK、Build 信息
-- 读取系统包、用户包、桌面入口包、HOME 包和部分运行时角色信息
-- 把包分成“核心保留”“安全可删”“用户安装”几类
-- 对“安全可删”项执行 `pm uninstall --user 0`
-- 清理后做设备验活，异常时中止当前批次
-- 保存最近一次清理记录
-- 恢复最近一次清理
-- 查看历史批次和健康检查结果
+### Tech stack
 
-## 它是怎么工作的
+- **Backend:** Rust + Tauri 2
+- **Frontend:** React 19 + TypeScript
+- **Build:** Vite 8 + pnpm
 
-大致流程是这样：
+### Prerequisites
 
-1. 通过 ADB 读取设备和包信息
-2. 根据规则和运行时信息做风险分层
-3. 只把判定为 `safeRemove` 的包加入清理队列
-4. 执行 `pm uninstall --user 0`
-5. 在批次执行过程中持续做验活
-6. 把结果写入本地记录，供后续恢复
-
-这里有两个边界要说清楚：
-
-- `pm uninstall --user 0` 不是永久删掉系统分区里的 APK，它是对当前用户隐藏/卸载
-- 当前版本只支持恢复**最近一次**清理记录，不是任意时间点快照
-
-## 快速开始
-
-### 1. 下载安装包
-
-从 [Releases](https://github.com/skernelx/android-debloat-studio/releases) 下载对应平台的安装包：
-
-- macOS：`Android.Debloat.Studio_*.dmg`
-- Windows：`Android.Debloat.Studio_*_x64-setup.exe`
-
-### 2. 打开手机的 USB 调试
-
-不同品牌路径不一样，但思路基本一致：
-
-1. 在“关于手机”里连续点击版本号 7 次，打开开发者模式
-2. 回到设置，进入“开发者选项”
-3. 打开“USB 调试”
-
-如果你忘了怎么开，应用内已经做了常见品牌的提示，不需要再去网上搜一轮。
-
-### 3. 连接手机并授权
-
-1. 用数据线连接手机
-2. 保持手机亮屏、解锁
-3. 如果弹出“允许 USB 调试”，点“允许”
-4. 回到应用，点击“刷新设备”
-
-### 4. 分析预装包
-
-设备进入 `device` 状态后，点击“分析预装包”。
-
-应用会读取包信息并给出分析结果。第一次分析可能会比较慢，尤其是在系统包很多的设备上，这是正常现象。
-
-### 5. 执行清理
-
-确认结果后，执行清理。
-
-当前版本默认只会对被判定为“安全可删”的包动手，不会让你直接把所有系统包一把梭。
-
-### 6. 需要时恢复
-
-如果这一批删完发现不合适，可以用“恢复最近一次清理”把刚才那一批撤回。
-
-## 如果手机没开 USB 调试，会怎样
-
-不会静默卡住。
-
-当前界面会区分几种常见状态，并给出对应提示：
-
-- 没检测到设备
-- 设备是 `unauthorized`
-- 设备是 `offline`
-- ADB 当前不可用
-
-也就是说，如果问题出在“没开 USB 调试”或“手机没点允许”，应用会直接提醒你，而不是假装已经连上。
-
-## 开发
-
-### 技术栈
-
-- Tauri 2
-- React 19
-- TypeScript
-- Rust
-
-### 本地依赖
-
-- Node.js
+- Node.js 22+
 - pnpm
-- Rust
-- Xcode Command Line Tools（macOS 本地开发时）
+- Rust toolchain
+- Xcode Command Line Tools (macOS)
 
-### 安装依赖
+### Setup
 
 ```bash
 pnpm install
-```
-
-### 启动开发模式
-
-```bash
 pnpm tauri:dev
 ```
 
-### 代码检查
+### Build
+
+```bash
+pnpm tauri:build
+```
+
+### Lint & test
 
 ```bash
 pnpm lint
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-### 本地打包
+### Project structure
+
+```
+src/                  React frontend (App, API layer, types)
+src-tauri/
+  src/adb.rs          ADB invocation, device scanning, package collection
+  src/analyzer.rs     Risk classification and vendor rule engine
+  src/cleanup.rs      Batch uninstall, health probes, rollback
+  src/records.rs      Local operation history persistence
+  rules/              Vendor-specific rule packs (JSON)
+.github/workflows/    CI/CD release pipeline
+```
+
+### Release
+
+Push a version tag to trigger an automated build:
+
+```bash
+git tag v0.1.3
+git push origin v0.1.3
+```
+
+GitHub Actions will build and publish macOS `.dmg` and Windows `.exe` installers.
+
+---
+
+<details>
+<summary><strong>中文说明</strong></summary>
+
+# Android Debloat Studio
+
+免 root 的安卓预装清理桌面工具，基于 Tauri 2 + React + Rust 构建。
+
+通过 USB 连接手机，自动扫描预装包，按风险分层展示分析结果，勾选后一键清理——不用手敲 ADB 命令，不用自己查包名。
+
+## 功能
+
+- **设备自动识别** — 扫描已连接设备，显示品牌、型号、Android 版本、SDK、Build 信息
+- **风险分层分析** — 根据厂商规则和运行时角色检测，将包分为「核心保留」「安全可删」「用户安装」三类
+- **双清理模式** — 「平衡模式」保守清理，保留电话/短信/相机；「极限精简」只保系统骨架
+- **逐包验活** — 每删一个包后检查设备健康状态，异常时自动中止
+- **一键回滚** — 恢复最近一次清理批次
+- **操作历史** — 记录每次清理和恢复的时间、结果、健康状态
+- **多厂商规则** — 内置小米/Redmi、华为/荣耀、三星、OPPO/realme/一加、vivo/iQOO 规则包
+- **内置 ADB** — 自带 `adb`，不需要额外安装
+- **连接引导** — 界面内直接展示各品牌 USB 调试开启方式
+
+## 工作原理
+
+1. 通过 ADB 读取设备信息和全部已安装包
+2. 根据厂商规则 + 运行时角色（桌面、默认电话、默认短信）做风险分层
+3. 将判定为「安全可删」的包展示为可勾选列表
+4. 对选中的包执行 `pm uninstall --user 0`，每删一个包后做验活检查
+5. 将本次操作写入本地历史，支持后续回滚
+
+> **说明：** `pm uninstall --user 0` 是对当前用户隐藏/卸载应用，不会删除系统分区中的 APK。恢复出厂设置后会全部恢复。
+
+## 下载
+
+从 [**Releases**](https://github.com/skernelx/android-debloat-studio/releases) 下载安装包：
+
+| 平台 | 文件 |
+|------|------|
+| macOS (Apple Silicon) | `Android.Debloat.Studio_*.dmg` |
+| Windows (x64) | `Android.Debloat.Studio_*_x64-setup.exe` |
+
+## 快速开始
+
+1. **开启 USB 调试** — 进入「关于手机」连续点击版本号 7 次，然后在「开发者选项」中打开「USB 调试」
+2. **连接手机** — 用数据线连接电脑，手机弹窗点「允许」
+3. **启动应用** — 打开 Android Debloat Studio，点击「刷新设备」
+4. **分析** — 设备显示「已就绪」后，点击「分析预装包」
+5. **清理** — 勾选要删除的包，点击清理按钮
+6. **回滚** — 如需撤回，点击「恢复最近一次清理」
+
+## 清理模式
+
+| 模式 | 策略 | 适用场景 |
+|------|------|---------|
+| **平衡模式** | 保留电话、短信、相机、浏览器、厂商安全中心 | 稳妥的首次清理 |
+| **极限精简** | 只保系统骨架、桌面、安装器、网络连接 | 不需要原生电话/短信/相机时的深度精简 |
+
+## 支持厂商
+
+| 厂商族 | 品牌 |
+|--------|------|
+| 小米 | 小米、Redmi、POCO（MIUI / HyperOS） |
+| 华为 | 华为、荣耀（EMUI / MagicUI） |
+| 三星 | 三星（One UI） |
+| ColorOS | OPPO、realme、一加（ColorOS） |
+| vivo | vivo、iQOO（Funtouch / OriginOS） |
+| 通用 | 其他 Android 设备 |
+
+## 开发
+
+### 技术栈
+
+- **后端：** Rust + Tauri 2
+- **前端：** React 19 + TypeScript
+- **构建：** Vite 8 + pnpm
+
+### 环境要求
+
+- Node.js 22+
+- pnpm
+- Rust 工具链
+- Xcode Command Line Tools（macOS）
+
+### 本地开发
+
+```bash
+pnpm install
+pnpm tauri:dev
+```
+
+### 打包
 
 ```bash
 pnpm tauri:build
 ```
 
-默认产物目录：
-
-- `src-tauri/target/release/bundle/dmg/`
-- `src-tauri/target/release/bundle/nsis/`
-
-## 自动发布
-
-仓库内置 GitHub Actions 发布流程。
-
-推送形如 `v0.1.1` 的 tag 后，会自动构建并上传：
-
-- macOS `.dmg`
-- Windows `NSIS .exe`
-
-示例：
+### 代码检查与测试
 
 ```bash
-git tag v0.1.1
-git push origin refs/tags/v0.1.1
+pnpm lint
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-## 项目结构
+### 发布
 
-```text
-android-debloat-studio/
-├── src/                          React 前端
-├── src-tauri/src/adb.rs          ADB 调用、设备扫描、包采集
-├── src-tauri/src/analyzer.rs     风险分层与分析
-├── src-tauri/src/cleanup.rs      清理、验活、恢复
-├── src-tauri/src/records.rs      本地记录持久化
-├── src-tauri/rules/              厂商规则
-└── .github/workflows/release.yml 自动发布
+推送版本 tag 触发自动构建：
+
+```bash
+git tag v0.1.3
+git push origin v0.1.3
 ```
 
-## 当前边界
+GitHub Actions 会自动构建并发布 macOS `.dmg` 和 Windows `.exe` 安装包。
 
-为了避免误导，这里把现状说死一点：
-
-- 当前 Release 重点覆盖的是 macOS 和 Windows
-- Linux 安装包暂时没有一起发布
-- 当前策略仍然偏保守，目标是“安全清理”，不是“系统只剩桌面”
-- 如果你要把它推进到极限精简模式，需要继续改分析器和验活策略
-
-## 仓库
-
-- 仓库地址：[skernelx/android-debloat-studio](https://github.com/skernelx/android-debloat-studio)
-- 问题反馈：[Issues](https://github.com/skernelx/android-debloat-studio/issues)
+</details>
